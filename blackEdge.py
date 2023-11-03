@@ -94,9 +94,9 @@ def getBorderEvent(contours, isSlowMode=False):
                     time.sleep(10 / len(points))
                 time.sleep(1.2 / len(points))
     followMode = False
-    for i in range(0, 10):
-        send_cmd_GO(999, 999)
-        time.sleep(0.1)
+    # for i in range(0, 1):
+    send_cmd_GO(999, 999)
+    # time.sleep(0.1)
 
 
 # 串口
@@ -119,6 +119,16 @@ def pixel2mm(x, y):
     return 500 * (x / pixelShapeX), 500 * (y / pixelShapeY)
 
 
+def send_cmd_GO_mm(x, y):
+    x, y = pixel2mm(x, y)
+    print(f'{x} {y}')
+    try:
+        send_cmd(cmd=f"GO:{x},{y};")
+    except Exception as e:
+        print(f'- 发送串口失败')
+        traceback.print_exception(e)
+
+
 def find_midpoints(outer_contour, inner_contour):
     midpoints = []
 
@@ -139,7 +149,7 @@ def detect_tape_edge(frame, slowMode, debugMode=False):
     lab = cv2.cvtColor(frame, cv2.COLOR_BGR2Lab)
 
     # OpenMV中的LAB阈值
-    openmv_thresholds = (0, 30, -128, 127, -128, 127)
+    openmv_thresholds = (0, 40, -128, 127, -128, 127)
 
     # 转换为OpenCV中的范围
     lower_black = np.array(
@@ -233,6 +243,45 @@ def fixCancvs(frame):
         return frame
 
 
+def draw_cross(image, pt, color, cross_length=10):
+    """
+    在给定的图像上绘制一个十字。
+
+    参数:
+    - image: 要修改的图像。
+    - pt: 十字的中心点。
+    - color: 十字的颜色。
+    - cross_length: 十字的半长度。
+    """
+    x, y = pt
+    cv2.line(image, (x - cross_length, y), (x + cross_length, y), color, 2)
+    cv2.line(image, (x, y - cross_length), (x, y + cross_length), color, 2)
+    return image
+
+
+def drawCircle():
+    h, k = 250, 250  # 圆的中心
+    r = 200  # 半径
+
+    # 将圆分成更小的段。数值越大，采样点越多。
+    # 例如，你可以使用360来每度采样一个点，或者使用更大的值来获得更多的采样点。
+    segments = 280
+    # timeN = 0.001
+    for i in range(0, 3):
+        # timeN += 0.001
+        for i in range(segments):
+            theta = 2 * math.pi * i / segments
+            x = int(h + r * math.cos(theta))
+            y = int(k + r * math.sin(theta))
+
+            # 保证x和y的值在0到500之间
+            if 0 <= x <= 500 and 0 <= y <= 500:
+                send_cmd_GO(x, y)
+                time.sleep(0.01)  # 休眠1ms
+
+    send_cmd_GO(999, 999)
+
+
 time.sleep(10)  # 防止开机启动时启动太快导致窗口大小加载不对
 slowMode = False
 if __name__ == '__main__':
@@ -241,6 +290,17 @@ if __name__ == '__main__':
         imagesN += 1
         ret, frame = cap.read()
         frame = fixCancvs(frame)  # 剪切
+
+        # 获取图像的右下角坐标
+        h, w, _ = frame.shape
+        top_left_corner = (0, 0)
+        bottom_right_corner = (w - 1, h - 1)
+
+        # 画十字
+        frame = draw_cross(frame, top_left_corner, (255, 0, 0))
+        frame = draw_cross(frame, bottom_right_corner, (255, 0, 0))
+
+        frame = fixCancvs(frame)
 
         if not ret:
             print("无法接收帧")
@@ -276,6 +336,12 @@ if __name__ == '__main__':
             slowMode = not slowMode
         elif key == ord('b'):
             debugMode = not debugMode
+        elif key == ord('k'):
+            send_cmd_GO(0, 0)
+        elif key == ord('l'):
+            send_cmd_GO(499, 499)
+        elif key == ord('o'):
+            drawCircle()
         if followMode:
             frame = detect_tape_edge(frame, slowMode)
         if debugMode:
